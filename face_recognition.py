@@ -1,0 +1,324 @@
+
+
+#!/usr/bin/env python3
+"""
+Face Recognition System - Phase 1
+Core face database creation and recognition pipeline
+"""
+
+import cv2
+import face_recognition
+import numpy as nm
+import os
+import pickle
+import time
+from datetime import datetime
+import requests
+from urllib.parse import urlparse
+
+class FaceRecognitionSystem:
+	def __init__(self):
+		self.known_face_encodings = []
+		self.known_face_names = []
+		self.face_database_path = "face_database.plk"
+		self.reference_images_dir = "reference_images"
+
+		# Create directories if they don't exist
+		os.makedirs(self.reference_images_dir, exist_ok=True)
+
+		# Load existing database if available
+		self.load_face_database()
+
+	def download_reference_image(self, url, filename):
+		"""Download reference image from URL"""
+		try:
+			response = request.get(url)
+			response.raise_for_status()
+			filepath = os.path.joi(self.reference_images_dir, filename)
+			with open(filepath, 'wb') as f:
+				f.write(response.content)
+			print(f"Downloaded: {filename}")
+			return filepath
+		except Exception as e"
+			print(f"Error downloading {filename}: {e}")
+			return None
+
+	def setup_reference_images(self):
+		"""Download reference images for Nelson Mandela and Jimmy Carter"""
+		# Note: be sure to use properly licenced images
+		# for demo purposes, manually place the images in the reference_images folder
+
+		reference_people = {
+			"Nelson Mandela": [
+				"mandela_001.jpeg",
+				"mandela_002.jpeg",
+				"mandela_003.jpeg",
+				"mandela_004.jpeg",
+				"mandela_005.jpeg",
+			],
+			"Jimmy Carter": [
+				"carter_001.jpeg"
+				"carter_002.jpeg"
+				"carter_003.jpeg"
+				"carter_004.jpeg"
+				"carter_005.jpeg"
+			]
+		}
+		print("Please add reference images to the 'reference_images' folder:")
+		for person, images in reference_people.items():
+			print(f"\n{person}:")
+			for img in images:
+				print(f" - {img})
+
+		print("\nYou can find suitable images by searching for:")
+		print(". 'Nelson Mandela portrait' or 'Nelson Mandela face'")
+		print(". 'Jimmy Carter portrait' or 'Jimmy Carter face'")
+		print("\nMake sure the images are clear, well-lit, and show clearly")
+
+	def load_image_and_encode(self, image_path):
+		"""Load an image and create face encoding"""
+		try:
+			# load image
+			image = face_recognition.load_image_file(image_path)
+
+			# find face locations
+			face_locations = face_recognition.face_locations(image)
+
+			if len(face_locations) == 0:
+				print(f"No face found in {image_path}")
+				return None
+			if len(face_locations) > 1:
+				print(f"Multiple faces found in {image_path}, using the first image")
+
+			# Get face encoding
+			face_encodings = face_recognition.face_encodings(image, face_locations)
+
+			if len(face_encodings) > 0:
+				print(f"Successfully encoded face from {image_path}")
+				return face_encodings[0]
+			else:
+				print(f"Could not encode face from {image_path}")
+				return None
+
+		except Exception as e:
+			print(f"Error processing {image_path}: {e}")
+			return None
+
+	def build_face_database(self):
+		"""Build face database from reference images"""
+		print("Building face database...")
+
+		# Clear existing data
+		self.known_face_encodings = []
+		self.known_face_names = []
+
+		# Process all images in reference directory
+		for filename in os.listdir(self.reference_images_dir):
+			if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+				image_path = os.path.join(self.reference_images_dir, filename)
+
+			# Determine person name from filename
+			filename_lower = filename.lower()
+			if 'mandela' in filename_lower:
+				person_name = "Nelson Mandela"
+			elif 'carter' in filename_lower:
+				person_name = "Jimmy Carter"
+			else:
+				print(f"Unknown person in {filename}")
+				continue
+
+			# Get face encoding
+			encoding = self.load_image_and_encode(image_path)
+			if encoding is not None:
+				self.known_face_encodings.append(encoding)
+				self.known_face_names.append(person_name)
+
+		# Save database
+		self.save_face_database()
+		print(f"Face database built with {len(self.known_face_encodings)} face encodings")
+
+	def save_face_database(self):
+		"""Save face database to file"""
+		database = {
+			'encodings': self.known_face_encodings,
+			'names': self.known_face_names
+		}
+		with open(self.face_database_path, 'wb') as f:
+			pickle.dump(database, f)
+		print(f"Face database saved to {self.face_database_path}")
+
+	def load_face_database(self):
+		"""Load face database from file"""
+		if os.path.exists(self.face_database_path):
+			try:
+				with open(self.face_database_path, 'rb') as f:
+					database = pickle.load(f)
+				self.known_face_encodings = database['encodings']
+				self.known_face_names = database['names']
+				print(f"Loaded face database with {len(self.known_face_encodings)}")
+			except Exception as e:
+				print(f"Error loading face database: {e}")
+				self.known_face_encodings = []
+				self.known_face_names = []
+		else:
+			print("No existing face database found")
+
+	def recognize_face(self, frame, confidence_threshold=0.6):
+		"""Recognize faces in frame"""
+		# Convert BGR to RGB (OpenCV uses BGR, face recognition uses RGB)
+		rgb_frame = cv2.cvtColor(frame, cv2COLOR_BGR2RGB)
+
+		# Find face locations and encodings
+		face_locations = face_recognition.face_locations(rgb_frame)
+		face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+		results = []
+
+		for face_encoding, face_location in zip(face_encodings, face_locations):
+			# Compare with known faces
+			if len(self.known_face_encodings) > 0:
+				face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
+				best_match_index = np.argmin(face_distances)
+
+				# check if the best match is within threshold
+				if face_distances[best_match_index] <= confidence_threshold:
+					name = self.known_face_names[best_match_index]
+
+					# convert distance to confidence
+					confidence = 1 - face_distances[best_match_index]
+				else:
+					name = "Unknown Person"
+					confidence = 0.0
+
+				results.append({
+					'name': name,
+					'confidence': confidence,
+					'location': face_location
+				})
+			return results
+
+	def draw_results_on_frame(self, frame, results):
+		"""Draw recognition results on frame"""
+		for result in results:
+			top, right, bottom, left = result['location']
+			name = result['name']
+			confidence = result['confidence']
+
+			# Draw rectangle around face
+			color = (0, 255, 0) if name != "Unknown Person" else (0, 0, 255)
+			cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+
+			# Draw label
+			label = f"{name} ({confidence: .2%})" if confidence > 0 else name
+			cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
+			cv2.putText(frame, label, (left, + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+
+		return frame
+
+	def run_camera_recognition(self):
+		"""Run real time face recognition with the camera"""
+		print("Starting camera recognition...")
+		print("Controls:")
+		print("  SPACE: Analyze current frame")
+		print("  'q': Quit")
+		print("  'r': Rebuild face database")
+
+		# Initialize camera
+		cap = cv2.VideoCapture(0)
+		if not cap.isOpened():
+			print("Error: Could not open camera")
+			return
+
+		# Set camera properties for better performance
+		cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+		cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+		cap.set(cv2.CAP_PROP_FPS, 30)
+
+		analyzing = False
+		last_analysis_time = 0
+
+		while True:
+			ret, frame = cap.read()
+			if not ret:
+				print("Error: Could not read frame")
+				break
+			# Show current frame
+			display_frame = frame.copy()
+
+			# Add status text
+			status_text = "Press SPACE to analyze" if not analyzing else "Analyzing..."
+			cv2.putText(display_frame, status_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+			cv2.imshow('Face Recognition System', display_frame)
+
+			# Handle key presses
+			key = cv2.waitKey(1) & 0xFF
+			if key == ord('q'):
+				break
+			elif key = ord(' '):  # Space key
+				if not analyzing and time.time() - last_analysis_time > 1:  # Prevent spam
+					analyzing = True
+					print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzinf frame...")
+
+					start_time = time.time()
+					results = self.recognize_face(frame)  # get results from method in this class
+					procesing_time = time.time() - start_time
+
+					print(f"Processing time: {processing_time:.2f} seconds")
+
+					if results:
+						for i, result in enumerate(results):
+							print(f"Face {i+1}: {result['name']} (Confidence: {result['confidence']:.2%})")
+
+					else:
+						print("No faces detected")
+
+					# Show results on frame for 3 seconds
+					result_frame = self.draw_results_on_frame(frame.copy(), results)
+
+					end_time = time.time() + 3
+					while time.time() < end_time:
+						cv2.imshow('Face Recognition System', result_frame)
+						if cv2.waitKey(30) & 0xFF == ord('q'):
+							break
+
+					analyzing = False
+					last_analysis_time = time.time()
+
+			elif key == ord('r'):
+				print("Rebuilding face recognition...")
+				self.build_face_database()
+
+			cap.release()
+			cv2.destroyAllWindows()
+
+def main():
+	"""Main function"""
+	print("Face Recognition System - Phase 1")
+	print("=" * 40)
+
+	# Initialize system
+	system = FaceRecognitionSystem()
+
+	# Check if we have reference (training) images
+	if len(os.listdir(system.reference_images_dir)) == 0:
+		print("No reference images found")
+		system.setup_reference_images()
+		return
+
+	# Build face database, if needed
+	if len(system.known_face_encodings) == 0:
+		print("No face database found. Building from reference images...")
+		system.build_face_database()
+
+	if len(system.known_face_encodings) == 0:
+		print("No faces could be encoded. Please check your reference images.")
+		return
+
+	# Start camera recognition
+	system.run_camera_recognition()
+
+if __name__ == "__main__":
+	main()
+
+
