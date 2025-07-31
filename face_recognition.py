@@ -39,7 +39,7 @@ class FaceRecognitionSystem:
 				f.write(response.content)
 			print(f"Downloaded: {filename}")
 			return filepath
-		except Exception as e"
+		except Exception as e:
 			print(f"Error downloading {filename}: {e}")
 			return None
 
@@ -68,7 +68,7 @@ class FaceRecognitionSystem:
 		for person, images in reference_people.items():
 			print(f"\n{person}:")
 			for img in images:
-				print(f" - {img})
+				print(f" - {img}")
 
 		print("\nYou can find suitable images by searching for:")
 		print(". 'Nelson Mandela portrait' or 'Nelson Mandela face'")
@@ -255,7 +255,7 @@ class FaceRecognitionSystem:
 			key = cv2.waitKey(1) & 0xFF
 			if key == ord('q'):
 				break
-			elif key = ord(' '):  # Space key
+			elif key == ord(' '):  # Space key
 				if not analyzing and time.time() - last_analysis_time > 1:  # Prevent spam
 					analyzing = True
 					print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzinf frame...")
