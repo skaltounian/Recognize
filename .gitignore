@@ -1,0 +1,10 @@
+# exclude directories that contain environment files
+__pycache__/
+face_recognition/
+open-faceenv/
+opencv-faceenv/
+source/
+myenv/
+
+
+
