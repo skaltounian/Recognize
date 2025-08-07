@@ -5,6 +5,7 @@ Core face database creation and recognition pipeline
 """
 
 import cv2
+from picamera2 import Picamera2
 import face_recognition
 import numpy as nm
 import os
@@ -214,114 +215,49 @@ class FaceRecognitionSystem:
 		return frame
 
 	def run_camera_recognition(self):
-		"""Run real time face recognition with the camera"""
+		"""Run real time face recognition with Picamera2"""
 		print("Starting camera recognition...")
 		print("Controls:")
 		print("  SPACE: Analyze current frame")
 		print("  'q': Quit")
 		print("  'r': Rebuild face database")
 
-	# Initialize camera
-#		cap = cv2.VideoCapture(0)
-#		if not cap.isOpened():
-#			print("Error: Could not open camera")
-#			return
+		# initialize Picamera2
+		picam2 = Picamera2()
+		picam2.configure(picam2.preview_configuration(main={"format": 'RGB888', "size": (640, 480)}))
+		picam2.start()
 
-		# Initialize - try different indices
-		cap = None
-		for camera_index in range(3):
-			print(f"Trying camera index {camera_index}...")
-			cap = cv2.VideoCapture(camera_index)
-			if cap.isOpened():
-					# Test if we can read a frame
-				ret, test_frame = cap.read()
-				if ret:
-					print(f"Successfully opened camera at index {camera_index}")
-					break
-				else:
-					print(f"Camera {camera_index} opened but cannot read frames")
-					cap.release()
-					cap = None
-			else:
-				print(f"Could not open camera at index {camera_index}")
-				if cap:
-					cap.release()
-				cap = None
-
-		if cap is None:
-			print("No standard camera found. trying RPI camera approaches...")
-
-			# Try wit different camera backends
-			backends_to_try = [
-				cv2.CAP_V4L2,
-				cv2.CAP_GSTREAMER,
-				cv2.CAP_ANY
-			]
-			for backend in backends_to_try:
-				print(f"Trying backend: {backend}")
-				cap = cv2.VideoCapture(0, backend)
-				if cap.isOpened():
-					ret, test_frame = cap.read()
-					if ret:
-						print(f"Success in opening the RPI camera at {backend}")
-						break
-					else:
-						cap.release()
-						cap = None
-				else:
-					if cap:
-						cap.release()
-					cap = None
-
-		if cap is None:
-			print("Error: Could not find working camera")
-			return
-
-		# Set camera properties for better performance
-		cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-		cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-		cap.set(cv2.CAP_PROP_FPS, 30)
-
-		analyzing = False
+		analizing = False
 		last_analysis_time = 0
 
 		while True:
-			ret, frame = cap.read()
-			if not ret:
-				print("Error: Could not read frame")
-				break
-			# Show current frame
+			frame = picam2.capture_array()
 			display_frame = frame.copy()
+			status_text = "Press SPACE key to analyze" if not analyzing else "Analyzing..."
 
-			# Add status text
-			status_text = "Press SPACE to analyze" if not analyzing else "Analyzing..."
 			cv2.putText(display_frame, status_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-			cv2.imshow('Face Recognition System', display_frame)
-
-			# Handle key presses
 			key = cv2.waitKey(1) & 0xFF
+
 			if key == ord('q'):
 				break
-			elif key == ord(' '):  # Space key
-				if not analyzing and time.time() - last_analysis_time > 1:  # Prevent spam
+			elif key == ord(' '):
+				if not analyzing and time.time() - last_analysis_time > 1:
 					analyzing = True
-					print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzinf frame...")
+					print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzing frame...")
 
-					start_time = time.time()
-					results = self.recognize_face(frame)  # get results from method in this class
-					procesing_time = time.time() - start_time
+					start.time = time.time()
+					results = self.recognize_face(frame)
+					processing_time = time.time() - start_time
 
 					print(f"Processing time: {processing_time:.2f} seconds")
 
 					if results:
 						for i, result in enumerate(results):
 							print(f"Face {i+1}: {result['name']} (Confidence: {result['confidence']:.2%})")
-
 					else:
-						print("No faces detected")
+						print("No face detected")
 
-					# Show results on frame for 3 seconds
 					result_frame = self.draw_results_on_frame(frame.copy(), results)
 
 					end_time = time.time() + 3
@@ -329,16 +265,15 @@ class FaceRecognitionSystem:
 						cv2.imshow('Face Recognition System', result_frame)
 						if cv2.waitKey(30) & 0xFF == ord('q'):
 							break
-
 					analyzing = False
 					last_analysis_time = time.time()
-
 			elif key == ord('r'):
-				print("Rebuilding face recognition...")
+				print("Rebuilding face database...")
 				self.build_face_database()
 
-			cap.release()
-			cv2.destroyAllWindows()
+		cv2.destroyAllWindows()
+		picam2.close()
+
 
 def main():
 	"""Main function"""
