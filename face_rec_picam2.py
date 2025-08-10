@@ -1,4 +1,4 @@
-#!/urs/bin/env python3
+#!/usr/bin/env python3
 """
 Face recognition system - phase 1 using picamera2
 """
@@ -11,8 +11,10 @@ import pickle
 import time
 from datetime import datetime
 from picamera2 import Picamera2
+from libcamera import Transform
 from threading import Thread
 import queue
+import warnings
 
 class PiCamera2FaceRecognition:
 	def __init__(self):
@@ -25,6 +27,7 @@ class PiCamera2FaceRecognition:
 		self.picam2 = None
 		self.frame_queue = queue.Queue(maxsize=2)
 		self.camera_running = False
+		self.image_rotation = 180
 
 		# create directories if they don't exist
 		os.makedirs(self.reference_images_dir, exist_ok=True)
@@ -34,9 +37,11 @@ class PiCamera2FaceRecognition:
 
 	def load_image_and_encode(self, image_path):
 		"""Load an image and create a face encoding"""
+		print("... load image and encode")
+
 		try:
 			# Load image
-			image = face_recognition.face_locations(image_path)
+			image = face_recognition.load_image_file(image_path)
 
 			# find face locations
 			face_locations = face_recognition.face_locations(image)
@@ -71,23 +76,25 @@ class PiCamera2FaceRecognition:
 
 		# Process all images in reference directory
 		for filename in os.listdir(self.reference_images_dir):
-			image_path = os.path.join(self.reference_images_dir, filename)
+			if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+				image_path = os.path.join(self.reference_images_dir, filename)
 
-			# Determine person name from filename
-			filename_lower = filename.lower()
-			if 'mandela' in filename_lower:
-				person_name = "Nelson Mandela"
-			elif 'carter' in filename_lower:
-				person_name = "Jimmy Carter"
-			else:
-				print(f"Unknown person in filename: {filename}")
-				continue
+				# Determine person name from filename
+				filename_lower = filename.lower()
+				if 'mandela' in filename_lower:
+					person_name = "Nelson Mandela"
+				elif 'carter' in filename_lower:
+					person_name = "Jimmy Carter"
+				else:
+					print(f"Unknown person in filename: {filename}")
+					continue
 
-			# Get face encoding
-			encoding = self.load_image_and_encode(image_path)
-			if encoding is not None:
-				self.known_face_encodings.append(encoding)
-				self.known_face_names.append(person_name)
+				# Get face encoding
+				encoding = self.load_image_and_encode(image_path)
+				print("Completed encoding")
+				if encoding is not None:
+					self.known_face_encodings.append(encoding)
+					self.known_face_names.append(person_name)
 
 		# Save database
 		self.save_face_database()
@@ -122,14 +129,20 @@ class PiCamera2FaceRecognition:
 
 	def setup_camera(self):
 		"""Initialize camera using picamera2"""
+
 		try:
 			print("Initializing camera...")
 			self.picam2 = Picamera2()
 
+			# Configure camera rotation
+			transform = Transform(rotation=self.image_rotation)
+
 			# Configure camera
 			camera_config = self.picam2.create_preview_configuration(
-				main={"size": (640, 480), "format": "RGB888"}
+				main={"size": (640, 480), "format": "RGB888"},
+				transform=transform
 			)
+
 			self.picam2.configure(camera_config)
 
 			# Start camera
@@ -181,12 +194,17 @@ class PiCamera2FaceRecognition:
 
 	def recognize_face(self, frame, confidence_threshold=0.6):
 		"""Recognize faces in a frame"""
+
 		# Convert BGR to RGB (face recognition uses RGB)
 		rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 		# Find face locations and encodings
-		face_locations = face_recognition.face.locations(rgb_frame)
+		face_locations = face_recognition.face_locations(rgb_frame)
 		face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+		if len(face_locations) == 0:
+			print("No faces found")
+			return []
 
 		results = []
 
@@ -260,7 +278,7 @@ class PiCamera2FaceRecognition:
 				try:
 					frame = self.frame_queue.get_nowait()
 				except queue.Empty:
-					# use a blacl frame if no frame available
+					# use a black frame if no frame available
 					frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
 				# Show current frams
@@ -279,21 +297,25 @@ class PiCamera2FaceRecognition:
 					break
 				elif key == ord(' '):  # Space key
 					if not analyzing and time.time() - last_analysis_time > 1:  # prevent spam
-
 						analyzing = True
 						print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzing frame...")
+
+						# save the frame being analyzed for debugging
+						debug_filename = f"debug_frame_{datetime.now().strftime('%H%M%S')}.jpg"
+						cv2.imwrite(debug_filename, frame)
 
 						start_time = time.time()
 						results = self.recognize_face(frame)
 						processing_time = time.time() - start_time
 
-						print(f"Processing time: {processing_time: .2f} seconds")
+						print(f"Processing time: {processing_time:.2f} seconds")
 
 						if results:
 							for i, result in enumerate(results):
 								print(f"Face {i+1}: {result['name']} (Confidence: {result['confidence']:.2%})")
 						else:
 							print("No faces detected")
+
 						# show results on frame for 3 seconds
 						result_frame = self.draw_results_on_frame(frame.copy(), results)
 
@@ -335,6 +357,8 @@ def main():
 		print("- mandela_1, etc.")
 		print("- carter_1, ect.")
 		return
+	else:
+		print("Found reference images!")
 
 	# Build face database if needed
 	if len(system.known_face_encodings) == 0:
