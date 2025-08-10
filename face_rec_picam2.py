@@ -27,7 +27,7 @@ class PiCamera2FaceRecognition:
 		self.picam2 = None
 		self.frame_queue = queue.Queue(maxsize=2)
 		self.camera_running = False
-		self.image_rotation = 180
+		self.image_rotation = 180  # I need this to have the picture right side up
 
 		# create directories if they don't exist
 		os.makedirs(self.reference_images_dir, exist_ok=True)
@@ -245,7 +245,7 @@ class PiCamera2FaceRecognition:
 
 			# Draw label
 			label = f"{name}  ({confidence:0.2%})" if confidence > 0 else name
-			cv2.rectangle(frame, (left, top - 35), (right, bottom), color, cv2.FILLED)
+			cv2.rectangle(frame, (left, top - 35), (right, bottom), color, 2)
 			cv2.putText(frame, label, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
 		return frame
 
@@ -301,8 +301,8 @@ class PiCamera2FaceRecognition:
 						print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzing frame...")
 
 						# save the frame being analyzed for debugging
-						debug_filename = f"debug_frame_{datetime.now().strftime('%H%M%S')}.jpg"
-						cv2.imwrite(debug_filename, frame)
+#						debug_filename = f"debug_frame_{datetime.now().strftime('%H%M%S')}.jpg"
+#						cv2.imwrite(debug_filename, frame)
 
 						start_time = time.time()
 						results = self.recognize_face(frame)
