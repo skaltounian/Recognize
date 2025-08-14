@@ -55,13 +55,82 @@ class CVFunctions:
 		"""Load image and create face encoding"""
 		print(f"Load image from {image_path} and encode face.")
 
+		try:
+			# Load image
+			image = face_recognition.load_image_file(image_path)
+
+			# Find face location
+			face_locations = face_recognition.face_locations(image)
+			if len(face_locations) == 0:
+				print(f"No face found in {image_path}")
+				return None
+			elif len(face_locations) == 1:
+				print(f"Found a face in {image_path}, using first one")
+			elif len(face_locations) > 1:
+				print(f"Found multiple faces in {image_path}, using first one")
+			else:
+				print("How did we end up here?")
+
+			# Get face encoding
+			face_encodings = face_recognition.face_encodings(image, face_locations)
+			if len(face_encodings) > 0:
+				print(f"Successfully encoded face from {image_path}")
+				return face_encodings[0]
+			else:
+				print(f"Could not encode face from {image_path}")
+				return None
+
+		except Exception as e:
+			print(f"Error processing {image_path}: {e}")
+			return None
+
 	def build_face_database(self):
 		"""Build face database from reference images"""
 		print("Build face database from reference images.")
 
+		# Clear existing data
+		self.known_face_encodings = []
+		self.known_face_names = []
+
+	# Process all images in the reference directory
+		for filename in os.listdir(self.reference_images_dir):
+			if filename.lower().endswith(('.png', '.jpeg', '.jpg')):
+				# full image_directory-name + file-name
+				image_path = os.path.join(self.reference_images_dir, filename)
+
+				# Determine the person based on the file name
+				filename_lower = filename.lower()
+				if 'mandela' in filename_lower:
+					person_name = "Nelson Mandela"
+				elif 'carter' in filename_lower:
+					person_name = "Jimmy Carter"
+				else:
+					print(f"Unknown person in filename: {filename}")
+					continue
+
+				# Encode face of known person
+				encoding = self.load_image_and_encode(image_path)
+				print(f"Completed encoding and image of {person_name}")
+				if encoding is not None:
+					self.known_face_encodings.append(encoding)
+					self.known_face_names.append(person_name)
+
+				# Save database
+				self.save_face_database()
+				print(f"Face database built with {len(self.known_face_encodings)} face encodings")
+
 	def save_face_database(self):
 		"""Save face database to file"""
 		print("Save face database.")
+
+		database = {
+			'encodings': self.known_face_encodings,
+			'names': self.known_face_names
+		}
+
+		with open(self.face_database_path, 'wb') as f:
+			pickle.dump(database, f)
+		print(f"...Face database saved to {self.face_database_path}")
 
 	def load_face_database(self):
 		"""Load face database from file"""
@@ -97,13 +166,15 @@ def main():
 	else:
 		print(f"Found reference images in {cv.reference_images_dir}")
 
-	if len(cv.known_face_encodings) ==0:
+	if len(cv.known_face_encodings) == 0:
 		print("Face database not found. Building anew from reference images...")
 		cv.build_face_database()
 
-	if len(cv.known_face_encodings) ==0:
-		print("No faces could be encoded. Please check reference images.")
-		return
+		if len(cv.known_face_encodings) == 0:
+			print("No faces could be encoded. Please check reference images.")
+			return
+		else:
+			print("Faces have been encoded successfully.")
 
 if __name__ == "__main__":
 	main()
