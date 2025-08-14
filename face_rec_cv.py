@@ -28,6 +28,30 @@ class CameraFunctions:
 		"""Initialize camera"""
 		print("Initialize camera.")
 
+		try:
+			print("Initializing camera...")
+			self.picam2 = Picamera2()
+
+			# Configure camera rotation
+
+			# Configure camera
+			camera_config = self.picam2.create_preview_configuration(
+				main={"size": (640, 480), "format": "RGB888"},
+				transform = Transform(rotation=self.image_rotation)
+			)
+
+			self.picam2.configure(camera_config)
+
+			# Start camera and let it settle for 2 seconds
+			self.picam2.start()
+			print("Camera initialized successfully")
+			time.sleep(2)
+			return True
+
+		except Exception as e:
+			print(f"Error initializing camera: {e}")
+			return False
+
 	def capture_frame(self):
 		"""Capture a frame from the camera"""
 		print("Capture a frame from the camera.")
@@ -50,6 +74,10 @@ class CVFunctions:
 
 		# Load existing database if available
 		self.load_face_database()
+
+		# instantiate the camera functions
+		self.cam = CameraFunctions()  # Probably not necessary here.
+
 
 	def load_image_and_encode(self, image_path):
 		"""Load image and create face encoding"""
@@ -148,6 +176,18 @@ class CVFunctions:
 		"""Run real-time face recognition"""
 		print("Run real-time face recognition.")
 
+		print("Controls:")
+		print("   SPACE: Analyze current frame")
+		print("   'q': Quit program")
+		print("   'r': Rebuild face database")
+
+		# Initialize camera
+		if not self.cam.setup_camera():
+			print("Failed to initialize the camera")
+			return
+		else:
+			print("Initialized the camera")
+
 def main():
 	"""Main function"""
 	print("=" * 50)
@@ -156,19 +196,18 @@ def main():
 
 	# Instantiate classes:
 	cvf = CVFunctions()
-	cam = CameraFunctions()  # Probably not necessary here.
 
 	# Check if we have reference images
-	if len(os.listdir(cv.reference_images_dir)) == 0:
+	if len(os.listdir(cvf.reference_images_dir)) == 0:
 		print("Could not find reference images.")
 		print("Please add reference images to the designated folder.")
 		return
 	else:
-		print(f"Found reference images in {cv.reference_images_dir}")
+		print(f"Found reference images in {cvf.reference_images_dir}")
 
 	if len(cvf.known_face_encodings) == 0:
 		print("Face database not found. Building anew from reference images...")
-		cv.build_face_database()
+		cvf.build_face_database()
 
 		if len(cvf.known_face_encodings) == 0:
 			print("No faces could be encoded. Please check reference images.")
