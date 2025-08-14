@@ -155,8 +155,8 @@ def main():
 	print("=" * 50)
 
 	# Instantiate classes:
-	cv = CVFunctions()
-	cam = CameraFunctions()
+	cvf = CVFunctions()
+	cam = CameraFunctions()  # Probably not necessary here.
 
 	# Check if we have reference images
 	if len(os.listdir(cv.reference_images_dir)) == 0:
@@ -166,15 +166,18 @@ def main():
 	else:
 		print(f"Found reference images in {cv.reference_images_dir}")
 
-	if len(cv.known_face_encodings) == 0:
+	if len(cvf.known_face_encodings) == 0:
 		print("Face database not found. Building anew from reference images...")
 		cv.build_face_database()
 
-		if len(cv.known_face_encodings) == 0:
+		if len(cvf.known_face_encodings) == 0:
 			print("No faces could be encoded. Please check reference images.")
 			return
 		else:
 			print("Faces have been encoded successfully.")
+
+	# Start camera for face recognition
+	cvf.run_face_recognition()
 
 if __name__ == "__main__":
 	main()
