@@ -32,11 +32,16 @@ class CameraFunctions:
 			print("Initializing camera...")
 			self.picam2 = Picamera2()
 
-			# Configure camera rotation
-
 			# Configure camera
+#			camera_config = self.picam2.create_preview_configuration(
+#				main={"size": (640, 480), "format": "RGB888"},
+#				transform = Transform(rotation=self.image_rotation)
+#			)
+
+
+			# Configure. By default, OpenCV expects the image in BGR; not RBG
 			camera_config = self.picam2.create_preview_configuration(
-				main={"size": (640, 480), "format": "RGB888"},
+				main={"size": (640, 480), "format": "BGR888"},
 				transform = Transform(rotation=self.image_rotation)
 			)
 
@@ -45,7 +50,9 @@ class CameraFunctions:
 			# Start camera and let it settle for 2 seconds
 			self.picam2.start()
 			print("Camera initialized successfully")
+			self.camera_running = True
 			time.sleep(2)
+
 			return True
 
 		except Exception as e:
@@ -55,10 +62,42 @@ class CameraFunctions:
 	def capture_frame(self):
 		"""Capture a frame from the camera"""
 		print("Capture a frame from the camera.")
+		try:
+			if self.picam2 is None:
+				return None
+
+			# Capture frame
+			frame = self.picam2.capture_array()
+
+			# Convert RGB to BGR
+#			frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RBG2BGR)
+#			return frame_bgr
+
+			return frame
+
+		except Exception as e:
+			print(f"Error capturing frame: {e}")
+			return None
+
 
 	def camera_thread(self):
 		"""Thread function for continuous frame capture"""
 		print("Thread function.")
+		while self.camera_running:
+			frame = self.capture_frame()
+			if frame is not None:
+				# Keep only the latest frame
+				if not self.frame_queue.empty():
+					try:
+						self.frame_queue.get_nowait()
+					except queue.Empty:
+						pass
+				try:
+					self.frame_queue.put_nowait(frame)
+				except queue.Full:
+					pass
+			time.sleep(0.033)  # ~30 FPS
+
 
 
 class CVFunctions:
@@ -93,7 +132,7 @@ class CVFunctions:
 				print(f"No face found in {image_path}")
 				return None
 			elif len(face_locations) == 1:
-				print(f"Found a face in {image_path}, using first one")
+				print(f"Found a face in {image_path}")
 			elif len(face_locations) > 1:
 				print(f"Found multiple faces in {image_path}, using first one")
 			else:
@@ -185,8 +224,16 @@ class CVFunctions:
 		if not self.cam.setup_camera():
 			print("Failed to initialize the camera")
 			return
-		else:
-			print("Initialized the camera")
+
+		# Start camera thread
+		camera_thread = Thread(target=self.cam.camera_thread)
+		camera_thread.daemon = True
+		camera_thread.start()
+
+		analyzing = False
+		last_analysis_time = 0
+
+
 
 def main():
 	"""Main function"""
