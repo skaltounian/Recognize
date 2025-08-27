@@ -27,7 +27,7 @@ class PiCamera2FaceRecognition:
 		self.picam2 = None
 		self.frame_queue = queue.Queue(maxsize=2)
 		self.camera_running = False
-		self.image_rotation = 180  # I need this to have the picture right side up
+		self.image_rotation = 180  # Rotate image to have the right side up
 
 		# create directories if they don't exist
 		os.makedirs(self.reference_images_dir, exist_ok=True)
@@ -123,7 +123,7 @@ class PiCamera2FaceRecognition:
 			except Exception as e:
 				print(f"Error loading face database: {e}")
 				self.known_face_encodings = []
-				self.known_dace_names = []
+				self.known_face_names = []
 		else:
 			print("No existing face database found")
 
@@ -134,23 +134,19 @@ class PiCamera2FaceRecognition:
 			print("Initializing camera...")
 			self.picam2 = Picamera2()
 
-			# Configure camera rotation
-			transform = Transform(rotation=self.image_rotation)
-
 			# Configure camera
 			camera_config = self.picam2.create_preview_configuration(
 				main={"size": (640, 480), "format": "RGB888"},
-				transform=transform
+				transform = Transform(rotation=self.image_rotation),
 			)
 
 			self.picam2.configure(camera_config)
 
-			# Start camera
+			# Start camera and let it warm up settle for 2 seconds
 			self.picam2.start()
 			print("Camera initialized successfully")
-
-			# let camera warm up for a couple of seconds
 			time.sleep(2)
+
 			return True
 
 		except Exception as e:
@@ -159,16 +155,15 @@ class PiCamera2FaceRecognition:
 
 	def capture_frame(self):
 		"""Capture a frame from the camera"""
+
 		try:
 			if self.picam2 is None:
 				return None
 
-			# Capture frame
+			# Capture and return frame
 			frame = self.picam2.capture_array()
 
-			# Convert RGB to BGR for
-			frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-			return frame_bgr
+			return frame
 
 		except Exception as e:
 			print(f"Error capturing frame: {e}")
@@ -192,11 +187,8 @@ class PiCamera2FaceRecognition:
 					pass
 			time.sleep(0.033)  # ~30 FPS
 
-	def recognize_face(self, frame, confidence_threshold=0.6):
+	def recognize_face(self, rgb_frame, confidence_threshold=0.6):
 		"""Recognize faces in a frame"""
-
-		# Convert BGR to RGB (face recognition uses RGB)
-		rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 		# Find face locations and encodings
 		face_locations = face_recognition.face_locations(rgb_frame)
@@ -250,7 +242,7 @@ class PiCamera2FaceRecognition:
 		return frame
 
 
-	def run_camera_recognition(self):
+	def run_face_recognition(self):
 		"""Run real-time face recognition with picamera2"""
 		print("Starting face recognition system...")
 		print("Controls:")
@@ -276,21 +268,21 @@ class PiCamera2FaceRecognition:
 			while True:
 				# Get latest frame
 				try:
-					frame = self.frame_queue.get_nowait()
+					frame_rgb = self.frame_queue.get_nowait()
 				except queue.Empty:
 					# use a black frame if no frame available
-					frame = np.zeros((480, 640, 3), dtype=np.uint8)
+					frame_rgb = np.zeros((480, 640, 3), dtype=np.uint8)
 
-				# Show current frams
-				display_frame = frame.copy()
+				# Show current frame
+				display_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
 				# Add current frame
-				status_text = "Prest SPACE to analyze" if not analyzing else "Analyzing..."
+				status_text = "Press SPACE to analyze" if not analyzing else "Analyzing..."
 				cv2.putText(display_frame, status_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
 				cv2.imshow('Face Recognition System', display_frame)
 
-				# Handpresses
+				# Key presses
 				key = cv2.waitKey(1) & 0xFF
 
 				if key == ord('q'):
@@ -301,11 +293,8 @@ class PiCamera2FaceRecognition:
 						print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Analyzing frame...")
 
 						# save the frame being analyzed for debugging
-#						debug_filename = f"debug_frame_{datetime.now().strftime('%H%M%S')}.jpg"
-#						cv2.imwrite(debug_filename, frame)
-
 						start_time = time.time()
-						results = self.recognize_face(frame)
+						results = self.recognize_face(frame_rgb)
 						processing_time = time.time() - start_time
 
 						print(f"Processing time: {processing_time:.2f} seconds")
@@ -317,7 +306,7 @@ class PiCamera2FaceRecognition:
 							print("No faces detected")
 
 						# show results on frame for 3 seconds
-						result_frame = self.draw_results_on_frame(frame.copy(), results)
+						result_frame = self.draw_results_on_frame(frame_rgb.copy(), results)
 
 						end_time = time.time() + 3
 						while time.time() < end_time:
@@ -328,7 +317,7 @@ class PiCamera2FaceRecognition:
 						analyzing = False
 						last_analysis_time = time.time()
 				elif key == ord('r'):
-					print("REbuilding face database...")
+					print("Rebuilding face database...")
 					self.build_face_database()
 
 		except KeyboardInterrupt:
@@ -344,25 +333,25 @@ class PiCamera2FaceRecognition:
 
 def main():
 	"""Main function"""
-	print("Face Recognition System with picamera2")
-	print("=" * 40)
+	print("Face Recognition System with Picamera2 and OpenCV")
+	print("=" * 55)
 
 	# Initialize system
 	system = PiCamera2FaceRecognition()
 
 	# Check if we have reference images
 	if len(os.listdir(system.reference_images_dir)) == 0:
-		print("No reference images found!")
-		print("Please add reference images to the 'reference images' folder:")
+		print("Could not find reference images!")
+		print("Please add reference images to the designated folder:")
 		print("- mandela_1, etc.")
 		print("- carter_1, ect.")
 		return
 	else:
-		print("Found reference images!")
+		print("Found reference images in {system.reference_images_dir}!")
 
 	# Build face database if needed
 	if len(system.known_face_encodings) == 0:
-		print("No face database found. Building from reference images...")
+		print("Face database not found. Building from reference images...")
 		system.build_face_database()
 
 	if len(system.known_face_encodings) == 0:
@@ -370,7 +359,7 @@ def main():
 		return
 
 	# Start camera recognition
-	system.run_camera_recognition()
+	system.run_face_recognition()
 
 if __name__ == "__main__":
 	main()
