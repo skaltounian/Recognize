@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Face recognition system - phase 1 using picamera2
+Face recognition system - phase 1 using Picamera2, OpenCV and face_recognition
 """
 
 import cv2
@@ -127,6 +127,7 @@ class PiCamera2FaceRecognition:
 		else:
 			print("No existing face database found")
 
+
 	def setup_camera(self):
 		"""Initialize camera using picamera2"""
 
@@ -153,6 +154,7 @@ class PiCamera2FaceRecognition:
 			print(f"Error initializing camera: {e}")
 			return False
 
+
 	def capture_frame(self):
 		"""Capture a frame from the camera"""
 
@@ -170,8 +172,10 @@ class PiCamera2FaceRecognition:
 			return None
 
 
+
 	def camera_thread(self):
 		"""Thread function for continuous frame capture"""
+
 		while self.camera_running:
 			frame = self.capture_frame()
 			if frame is not None:
@@ -186,6 +190,7 @@ class PiCamera2FaceRecognition:
 				except queue.Full:
 					pass
 			time.sleep(0.033)  # ~30 FPS
+
 
 	def recognize_face(self, rgb_frame, confidence_threshold=0.6):
 		"""Recognize faces in a frame"""
@@ -209,7 +214,8 @@ class PiCamera2FaceRecognition:
 				# Check if the best match is within threshold
 				if face_distances[best_match_index] <= confidence_threshold:
 					name = self.known_face_names[best_match_index]
-					confidence = 1 - face_distances[best_match_index]  # Convert distance to confidence
+					# Convert distance to confidence
+					confidence = 1 - face_distances[best_match_index]
 				else:
 					name = "Unknown Person"
 					confidence = 0.0
@@ -224,8 +230,10 @@ class PiCamera2FaceRecognition:
 			})
 		return results
 
+
 	def draw_results_on_frame(self, frame, results):
 		"""Draw recognition results on frame"""
+
 		for result in results:
 			top, right, bottom, left = result['location']
 			name = result['name']
@@ -266,15 +274,16 @@ class PiCamera2FaceRecognition:
 
 		try:
 			while True:
-				# Get latest frame
+				# Get latest frame. Use black frame if queue is empty
 				try:
 					frame_rgb = self.frame_queue.get_nowait()
+
 				except queue.Empty:
-					# use a black frame if no frame available
 					frame_rgb = np.zeros((480, 640, 3), dtype=np.uint8)
 
-				# Show current frame
-				display_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+				# Convert current frame to BGR for OpenCV
+#				display_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+				display_frame = frame_rgb.copy()
 
 				# Add current frame
 				status_text = "Press SPACE to analyze" if not analyzing else "Analyzing..."
