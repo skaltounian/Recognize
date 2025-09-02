@@ -3,6 +3,8 @@
 Face recognition system - phase 1 using Picamera2, OpenCV and face_recognition
 Phase 2 - modular version, where I break up the operation into three classes
 1- CameraManager
+2- FaceDatabaseManager
+3- 
 """
 
 import cv2
@@ -116,12 +118,14 @@ class CameraManager:
 
 
 
-class PiCamera2FaceRecognition:
-	def __init__(self):
+class FaceDatabaseManager:
+	"""Handles face database operations including loading, saving, and building"""
+
+	def __init__(self, face_database_path="face_database.pkl", reference_images_dir="reference_images"):
 		self.known_face_encodings = []
-		self.known_face_names = []
-		self.face_database_path = "face_database.pkl"
-		self.reference_images_dir = "reference_images"
+		self_known_face_names = []
+		self.face_database_path = face_database_path
+		self.reference_images_dir = reference_images_dir
 
 		# create directories if they don't exist
 		os.makedirs(self.reference_images_dir, exist_ok=True)
@@ -161,6 +165,7 @@ class PiCamera2FaceRecognition:
 			return None
 
 
+
 	def build_face_database(self):
 		"""Build face database from reference images"""
 		print("Building face database...")
@@ -196,6 +201,7 @@ class PiCamera2FaceRecognition:
 		print(f"Face database built with {len(self.known_face_encodings)} face encodings")
 
 
+
 	def save_face_database(self):
 		"""Save face database to file"""
 		database = {
@@ -205,6 +211,7 @@ class PiCamera2FaceRecognition:
 		with open(self.face_database_path, 'wb') as f:
 			pickle.dump(database, f)
 		print(f" Face database saved to {self.face_database_path}")
+
 
 
 	def load_face_database(self):
@@ -223,6 +230,14 @@ class PiCamera2FaceRecognition:
 		else:
 			print("No existing face database found")
 
+
+	def get_known_faces(self):
+		"""Return known face encodings and names"""
+		return self.known_face_encodings, self.known_face_names
+
+
+class PiCamera2FaceRecognition:
+	def __init__(self):
 
 
 	def recognize_face(self, rgb_frame, confidence_threshold=0.6):
