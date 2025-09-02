@@ -4,7 +4,8 @@ Face recognition system - phase 1 using Picamera2, OpenCV and face_recognition
 Phase 2 - modular version, where I break up the operation into three classes
 1- CameraManager
 2- FaceDatabaseManager
-3- 
+3- FaceRecognizer
+4- FaceRecognitionSystem
 """
 
 import cv2
@@ -201,7 +202,6 @@ class FaceDatabaseManager:
 		print(f"Face database built with {len(self.known_face_encodings)} face encodings")
 
 
-
 	def save_face_database(self):
 		"""Save face database to file"""
 		database = {
@@ -211,7 +211,6 @@ class FaceDatabaseManager:
 		with open(self.face_database_path, 'wb') as f:
 			pickle.dump(database, f)
 		print(f" Face database saved to {self.face_database_path}")
-
 
 
 	def load_face_database(self):
@@ -236,12 +235,18 @@ class FaceDatabaseManager:
 		return self.known_face_encodings, self.known_face_names
 
 
-class PiCamera2FaceRecognition:
-	def __init__(self):
+class FaceRecognizer:
+	"""Handles face recognition operations and display"""
+
+	def __init__(self, face_database_manager):
+		self.db_manager = face_database_manager
 
 
 	def recognize_face(self, rgb_frame, confidence_threshold=0.6):
 		"""Recognize faces in a frame"""
+
+		# get known faces from database manager
+		known_face_encodings, known_face_names = self.db_manager.get_known_faces()
 
 		# Find face locations and encodings
 		face_locations = face_recognition.face_locations(rgb_frame)
@@ -298,6 +303,10 @@ class PiCamera2FaceRecognition:
 		return frame
 
 
+
+class FaceRecognitionSystem:
+
+
 	def run_face_recognition(self):
 		"""Run real-time face recognition with picamera2"""
 		print("Starting face recognition system...")
@@ -330,7 +339,6 @@ class PiCamera2FaceRecognition:
 					frame_rgb = np.zeros((480, 640, 3), dtype=np.uint8)
 
 				# Convert current frame to BGR for OpenCV
-#				display_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 				display_frame = frame_rgb.copy()
 
 				# Add current frame
