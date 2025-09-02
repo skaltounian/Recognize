@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
 Face recognition system - phase 1 using Picamera2, OpenCV and face_recognition
+Phase 2 - modular version, where I break up the operation into three classes
+1- CameraManager
 """
 
 import cv2
@@ -16,18 +18,110 @@ from threading import Thread
 import queue
 import warnings
 
+
+class CameraManager:
+	"""Handle all camera operations and frame capture"""
+
+	def __init__(self, image_rotation=180):
+		self.picam2 = None
+		self.frame_queue = queue.Queue(maxsize=2)
+		self.camera_running = False
+		self.image_rotation = image_rotation
+
+
+	def setup_camera(self):
+		"""Initialize camera using picamera2"""
+
+		try:
+			print("Initializing camera...")
+			self.picam2 = Picamera2()
+
+			# Configure camera
+			camera_config = self.picam2.create_preview_configuration(
+				main={"size": (640, 480), "format": "RGB888"},
+				transform = Transform(rotation=self.image_rotation),
+			)
+
+			self.picam2.configure(camera_config)
+
+			# Start camera and let it warm up settle for 2 seconds
+			self.picam2.start()
+			print("Camera initialized successfully")
+			time.sleep(2)
+
+			return True
+
+		except Exception as e:
+			print(f"Error initializing camera: {e}")
+			return False
+
+
+	def capture_frame(self):
+		"""Capture a frame from the camera"""
+
+		try:
+			if self.picam2 is None:
+				return None
+
+			# Capture and return frame
+			frame = self.picam2.capture_array()
+			return frame
+
+		except Exception as e:
+			print(f"Error capturing frame: {e}")
+			return None
+
+
+	def camera_thread(self):
+		"""Thread function for continuous frame capture"""
+
+		while self.camera_running:
+			frame = self.capture_frame()
+			if frame is not None:
+				# Keep only the latest frame
+				if not self.frame_queue.empty():
+					try:
+						self.frame_queue.get_nowait()
+					except queue.Empty:
+						pass
+				try:
+					self.frame_queue.put_nowait(frame)
+				except queue.Full:
+					pass
+			time.sleep(0.033)  # ~30 FPS
+
+
+	def start_camera_thread(self):
+		"""Start the camera thread"""
+		self.camera_running = True
+		camera_thread = Thread(target=self.camera_thread)
+		camera_thread.daemon = True
+		camera_thread.start()
+		return camera_thread
+
+
+	def get_latest_frame(self):
+		"""Get the latest frame from the queue"""
+		try:
+			return self.frame_queue.get_nowait()
+		except queue.Empty:
+			return np.zeros((480, 640, 3), dtype=np.uint8)
+
+
+	def stop_capera(self):
+		"""Stop camera and cleanup"""
+		self.camera_running = False
+		if self.picam2:
+			self.picam2.stop()
+
+
+
 class PiCamera2FaceRecognition:
 	def __init__(self):
 		self.known_face_encodings = []
 		self.known_face_names = []
 		self.face_database_path = "face_database.pkl"
 		self.reference_images_dir = "reference_images"
-
-		# camera setup
-		self.picam2 = None
-		self.frame_queue = queue.Queue(maxsize=2)
-		self.camera_running = False
-		self.image_rotation = 180  # Rotate image to have the right side up
 
 		# create directories if they don't exist
 		os.makedirs(self.reference_images_dir, exist_ok=True)
@@ -65,6 +159,7 @@ class PiCamera2FaceRecognition:
 		except Exception as e:
 			print(f"Error processing {image_path}: {e}")
 			return None
+
 
 	def build_face_database(self):
 		"""Build face database from reference images"""
@@ -111,6 +206,7 @@ class PiCamera2FaceRecognition:
 			pickle.dump(database, f)
 		print(f" Face database saved to {self.face_database_path}")
 
+
 	def load_face_database(self):
 		"""Load face database from file"""
 		if os.path.exists(self.face_database_path):
@@ -127,69 +223,6 @@ class PiCamera2FaceRecognition:
 		else:
 			print("No existing face database found")
 
-
-	def setup_camera(self):
-		"""Initialize camera using picamera2"""
-
-		try:
-			print("Initializing camera...")
-			self.picam2 = Picamera2()
-
-			# Configure camera
-			camera_config = self.picam2.create_preview_configuration(
-				main={"size": (640, 480), "format": "RGB888"},
-				transform = Transform(rotation=self.image_rotation),
-			)
-
-			self.picam2.configure(camera_config)
-
-			# Start camera and let it warm up settle for 2 seconds
-			self.picam2.start()
-			print("Camera initialized successfully")
-			time.sleep(2)
-
-			return True
-
-		except Exception as e:
-			print(f"Error initializing camera: {e}")
-			return False
-
-
-	def capture_frame(self):
-		"""Capture a frame from the camera"""
-
-		try:
-			if self.picam2 is None:
-				return None
-
-			# Capture and return frame
-			frame = self.picam2.capture_array()
-
-			return frame
-
-		except Exception as e:
-			print(f"Error capturing frame: {e}")
-			return None
-
-
-
-	def camera_thread(self):
-		"""Thread function for continuous frame capture"""
-
-		while self.camera_running:
-			frame = self.capture_frame()
-			if frame is not None:
-				# Keep only the latest frame
-				if not self.frame_queue.empty():
-					try:
-						self.frame_queue.get_nowait()
-					except queue.Empty:
-						pass
-				try:
-					self.frame_queue.put_nowait(frame)
-				except queue.Full:
-					pass
-			time.sleep(0.033)  # ~30 FPS
 
 
 	def recognize_face(self, rgb_frame, confidence_threshold=0.6):
