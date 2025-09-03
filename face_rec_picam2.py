@@ -111,12 +111,11 @@ class CameraManager:
 			return np.zeros((480, 640, 3), dtype=np.uint8)
 
 
-	def stop_capera(self):
+	def stop_camera(self):
 		"""Stop camera and cleanup"""
 		self.camera_running = False
 		if self.picam2:
 			self.picam2.stop()
-
 
 
 class FaceDatabaseManager:
@@ -133,6 +132,7 @@ class FaceDatabaseManager:
 
 		# Load existing database if available
 		self.load_face_database()
+
 
 	def load_image_and_encode(self, image_path):
 		"""Load an image and create a face encoding"""
@@ -164,7 +164,6 @@ class FaceDatabaseManager:
 		except Exception as e:
 			print(f"Error processing {image_path}: {e}")
 			return None
-
 
 
 	def build_face_database(self):
@@ -260,13 +259,13 @@ class FaceRecognizer:
 
 		for face_encoding, face_location in zip(face_encodings, face_locations):
 			# Compare with known faces
-			if len(self.known_face_encodings) > 0:
-				face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
+			if len(known_face_encodings) > 0:
+				face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
 				best_match_index = np.argmin(face_distances)
 
 				# Check if the best match is within threshold
 				if face_distances[best_match_index] <= confidence_threshold:
-					name = self.known_face_names[best_match_index]
+					name = known_face_names[best_match_index]
 					# Convert distance to confidence
 					confidence = 1 - face_distances[best_match_index]
 				else:
@@ -305,6 +304,12 @@ class FaceRecognizer:
 
 
 class FaceRecognitionSystem:
+	"""Main system class that coordinates all components"""
+
+	def __init__(self):
+		self.camera_manager = CameraManager()
+		self.db_manager = FaceDatabaseManager()
+		self.recognizer = FaceRecognizer(self.db_manager)
 
 
 	def run_face_recognition(self):
@@ -316,29 +321,22 @@ class FaceRecognitionSystem:
 		print("   'r': Rebuild face database")
 
 		# Initialize camera
-		if not self.setup_camera():
+		if not self.camera_manager.setup_camera():
 			print("Failed to initialize camera")
 			return
 
 		# Start camera thread
-		self.camera_running = True
-		camera_thread = Thread(target=self.camera_thread)
-		camera_thread.daemon = True
-		camera_thread.start()
+		self.camera_manager.start_camera_thread()
 
 		analyzing = False
 		last_analysis_time = 0
 
 		try:
 			while True:
-				# Get latest frame. Use black frame if queue is empty
-				try:
-					frame_rgb = self.frame_queue.get_nowait()
+				# Get latest frame
+				frame_rgb = self.camera_manager.get_latest_frame()
 
-				except queue.Empty:
-					frame_rgb = np.zeros((480, 640, 3), dtype=np.uint8)
-
-				# Convert current frame to BGR for OpenCV
+				# Convert current f display format
 				display_frame = frame_rgb.copy()
 
 				# Add current frame
@@ -359,7 +357,7 @@ class FaceRecognitionSystem:
 
 						# save the frame being analyzed for debugging
 						start_time = time.time()
-						results = self.recognize_face(frame_rgb)
+						results = self.recognizer.recognize_face(frame_rgb)
 						processing_time = time.time() - start_time
 
 						print(f"Processing time: {processing_time:.2f} seconds")
@@ -371,7 +369,7 @@ class FaceRecognitionSystem:
 							print("No faces detected")
 
 						# show results on frame for 3 seconds
-						result_frame = self.draw_results_on_frame(frame_rgb.copy(), results)
+						result_frame = self.recognizer.draw_results_on_frame(frame_rgb.copy(), results)
 
 						end_time = time.time() + 3
 						while time.time() < end_time:
@@ -383,16 +381,14 @@ class FaceRecognitionSystem:
 						last_analysis_time = time.time()
 				elif key == ord('r'):
 					print("Rebuilding face database...")
-					self.build_face_database()
+					self.db_manager.build_face_database()
 
 		except KeyboardInterrupt:
 			print("Interrupted by user")
 
 		finally:
 			# Cleanup
-			self.camera_running = False
-			if self.picam2:
-				self.picam2.stop()
+			self.camera_manager.stop_camera
 			cv2.destroyAllWindows()
 			print("Camera stopped and windows closed")
 
@@ -402,10 +398,10 @@ def main():
 	print("=" * 55)
 
 	# Initialize system
-	system = PiCamera2FaceRecognition()
+	system = FaceRecognitionSystem()
 
 	# Check if we have reference images
-	if len(os.listdir(system.reference_images_dir)) == 0:
+	if len(os.listdir(system.db_manager.reference_images_dir)) == 0:
 		print("Could not find reference images!")
 		print("Please add reference images to the designated folder:")
 		print("- mandela_1, etc.")
@@ -415,11 +411,13 @@ def main():
 		print("Found reference images in {system.reference_images_dir}!")
 
 	# Build face database if needed
-	if len(system.known_face_encodings) == 0:
+	known_encodings, _ = system.db_manager.get_known_faces()
+	if len(known_encodings) == 0:
 		print("Face database not found. Building from reference images...")
-		system.build_face_database()
+		system.db_manager.build_face_database()
 
-	if len(system.known_face_encodings) == 0:
+	known_encodings, _ = system.db_manager.get_known_faces()
+	if len(known_encodings) == 0:
 		print("No faces could be encoded. Please check reference images.")
 		return
 
